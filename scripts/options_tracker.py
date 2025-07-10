@@ -4,6 +4,7 @@ import time
 from datetime import date, timedelta
 import smtplib
 from email.message import EmailMessage
+import traceback
 
 class YFinanceOptionsTracker:
     def __init__(self, db_path="options_data.db", tickers=None):
@@ -216,36 +217,26 @@ class YFinanceOptionsTracker:
         self.cursor.execute(query, (snapshot_date,))
         rows = self.cursor.fetchall()
 
-        if not rows:
-            print("No anomalies triggered today.")
-            msg = EmailMessage()
-            msg['Subject'] = f"No Anomalies Detected for {snapshot_date}"
-            try:
-                with smtplib.SMTP_SSL(smtp_server, smtp_port) as smtp:
-                    smtp.login(sender_email, sender_password)
-                    smtp.send_message(msg)
-                print(f"Alert email sent to {recipient_email}")
-            except Exception as e:
-                print(f"Failed to send email: {e}")
-            return
-
-        # Format email
         msg = EmailMessage()
-        msg['Subject'] = f"Options Anomaly Alerts for {snapshot_date}"
         msg['From'] = sender_email
         msg['To'] = recipient_email
 
-        body = f"Anomalies detected for {len(rows)} ticker(s):\n\n"
-        for row in rows:
-            sym = row[0]
-            body += f"\n🔹 {sym}\n"
-            body += f"  OV_CALL_VOL: {row[1]} (x{row[3]:.1f}) {'✅' if row[4] else ''}\n"
-            body += f"  OV_PUT_VOL:  {row[5]} (x{row[7]:.1f}) {'✅' if row[8] else ''}\n"
-            body += f"  SHORT_CALL_VOL: {row[9]} (x{row[11]:.1f}) {'✅' if row[12] else ''}\n"
-            body += f"  OTM_CALL_VOL:   {row[13]} (x{row[15]:.1f}) {'✅' if row[16] else ''}\n"
-            body += f"  OI_CALL_DELTA:  {row[17]} (x{row[19]:.1f}) {'✅' if row[20] else ''}\n"
-
-        msg.set_content(body)
+        if not rows:
+            print("No anomalies triggered today.")
+            msg['Subject'] = f"No Anomalies Detected for {snapshot_date}"
+            msg.set_content(f"No unusual options activity was detected for {snapshot_date}.")
+        else:
+            msg['Subject'] = f"Options Anomaly Alerts for {snapshot_date}"
+            body = f"Anomalies detected for {len(rows)} ticker(s):\n\n"
+            for row in rows:
+                sym = row[0]
+                body += f"\n🔹 {sym}\n"
+                body += f"  OV_CALL_VOL: {row[1]} (x{row[3]:.1f}) {'✅' if row[4] else ''}\n"
+                body += f"  OV_PUT_VOL:  {row[5]} (x{row[7]:.1f}) {'✅' if row[8] else ''}\n"
+                body += f"  SHORT_CALL_VOL: {row[9]} (x{row[11]:.1f}) {'✅' if row[12] else ''}\n"
+                body += f"  OTM_CALL_VOL:   {row[13]} (x{row[15]:.1f}) {'✅' if row[16] else ''}\n"
+                body += f"  OI_CALL_DELTA:  {row[17]} (x{row[19]:.1f}) {'✅' if row[20] else ''}\n"
+            msg.set_content(body)
 
         try:
             with smtplib.SMTP_SSL(smtp_server, smtp_port) as smtp:
@@ -253,7 +244,8 @@ class YFinanceOptionsTracker:
                 smtp.send_message(msg)
             print(f"Alert email sent to {recipient_email}")
         except Exception as e:
-            print(f"Failed to send email: {e}")
+            print("Failed to send email:")
+            traceback.print_exc()
 
     def close(self):
         self.conn.close()

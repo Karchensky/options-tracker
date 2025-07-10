@@ -22,7 +22,7 @@ tickers = pd.read_csv("sp1500_tickers.csv")['Symbol'].dropna().tolist()
 # Step 3: Run the options tracker
 tracker = YFinanceOptionsTracker(db_path="options_data.db", tickers=tickers)
 # tracker = YFinanceOptionsTracker(db_path="options_data.db", tickers=['AAPL', 'MSFT', 'GOOGL','ABBV'])  # Example tickers
-# tracker.fetch_and_store()
+tracker.fetch_and_store()
 tracker.send_alert_email(
     snapshot_date=date.today().isoformat(),
     smtp_server='smtp.gmail.com',

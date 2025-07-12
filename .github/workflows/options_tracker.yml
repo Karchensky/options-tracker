@@ -27,12 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          
-      - name: Debug Email password check
-        run: |
-          echo "EMAIL_PASSWORD length: ${#EMAIL_PASSWORD}"
-          echo "RECIPIENT_EMAIL length: ${#RECIPIENT_EMAIL}"
-          echo "SENDER_EMAIL length: ${#SENDER_EMAIL}"
-          
-      # - name: Run options tracker
-      #   run: python scripts/runner.py
+
+      - name: Run options tracker
+        run: python scripts/runner.py
+        

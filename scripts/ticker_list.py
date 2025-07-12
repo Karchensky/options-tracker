@@ -23,7 +23,7 @@ def save_sp1500_tickers(csv_path="sp1500_tickers.csv"):
         except Exception as e:
             print(f"Failed to fetch {name}: {e}")
 
-    # Deduplicate and save
+    # Dedupe and save
     unique_tickers = sorted(set(tickers))
     df = pd.DataFrame(unique_tickers, columns=["Symbol"])
     df.to_csv(csv_path, index=False)

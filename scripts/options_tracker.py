@@ -1,79 +1,100 @@
 import yfinance as yf
-import sqlite3
 import time
 from datetime import date, timedelta
 import smtplib
 from email.message import EmailMessage
 import traceback
+import numpy as np
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, UniqueConstraint, NullPool, event
+from sqlalchemy.orm import sessionmaker, declarative_base, Mapper
+from dotenv import load_dotenv
 
-class YFinanceOptionsTracker:
-    def __init__(self, db_path="options_data.db", tickers=None):
-        self.conn = sqlite3.connect(db_path)
-        self.cursor = self.conn.cursor()
-        self._create_tables()
+# Load environment variables
+load_dotenv()
+
+# Email configuration
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
+
+# Database connection details
+DB_URL = os.getenv("SUPABASE_DB_URL")  # This is now fully ready-to-go
+
+Base = declarative_base()
+
+# Convert NumPy float and int types to native Python types before insert/update
+@event.listens_for(Mapper, "before_insert")
+@event.listens_for(Mapper, "before_update")
+def convert_numpy_types(mapper, connection, target):
+    for key, value in vars(target).items():
+        if isinstance(value, np.generic):
+            setattr(target, key, value.item())
+
+class OptionData(Base):
+    __tablename__ = "option_data"
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String)
+    expiration = Column(Date)
+    contract_symbol = Column(String)
+    strike = Column(Float)
+    last_price = Column(Float)
+    bid = Column(Float)
+    ask = Column(Float)
+    volume = Column(Integer)
+    open_interest = Column(Integer)
+    implied_volatility = Column(Float)
+    side = Column(String)
+    snapshot_date = Column(Date)
+    __table_args__ = (UniqueConstraint('contract_symbol', 'snapshot_date'),)
+
+class StockPriceSnapshot(Base):
+    __tablename__ = "stock_price_snapshot"
+    symbol = Column(String, primary_key=True)
+    snapshot_date = Column(Date, primary_key=True)
+    close_price = Column(Float)
+
+class OptionAnomaly(Base):
+    __tablename__ = "option_anomalies"
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String)
+    snapshot_date = Column(Date)
+    ov_call_vol = Column(Integer)
+    ov_call_baseline = Column(Float)
+    ov_call_ratio = Column(Float)
+    ov_trigger_ind = Column(Integer)
+    ov_put_vol = Column(Integer)
+    ov_put_baseline = Column(Float)
+    ov_put_ratio = Column(Float)
+    ov_put_trigger_ind = Column(Integer)
+    short_call_vol = Column(Integer)
+    short_call_baseline = Column(Float)
+    short_call_ratio = Column(Float)
+    short_call_trigger_ind = Column(Integer)
+    otm_call_vol = Column(Integer)
+    otm_call_baseline = Column(Float)
+    otm_call_ratio = Column(Float)
+    otm_call_trigger_ind = Column(Integer)
+    oi_call_delta = Column(Integer)
+    oi_call_baseline = Column(Float)
+    oi_call_ratio = Column(Float)
+    oi_call_trigger_ind = Column(Integer)
+    __table_args__ = (UniqueConstraint('symbol', 'snapshot_date'),)
+
+class SupabaseOptionTracker:
+    def __init__(self, tickers):
+        self.engine = create_engine(
+            DB_URL,
+            pool_pre_ping=True,  # Detect broken connections and reconnect automatically
+            poolclass=NullPool   # Avoid maintaining persistent connections
+        )
+        self.Session = sessionmaker(bind=self.engine)
         self.tickers = tickers or []
-
-    def _create_tables(self):
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS OPTION_DATA (
-            ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            SYMBOL TEXT,
-            EXPIRATION TEXT,
-            CONTRACT_SYMBOL TEXT,
-            STRIKE REAL,
-            LAST_PRICE REAL,
-            BID REAL,
-            ASK REAL,
-            VOLUME INTEGER,
-            OPEN_INTEREST INTEGER,
-            IMPLIED_VOLATILITY REAL,
-            SIDE TEXT,
-            SNAPSHOT_DATE DATE,
-            UNIQUE (CONTRACT_SYMBOL, SNAPSHOT_DATE)
-        );
-        """)
-
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS STOCK_PRICE_SNAPSHOT (
-            SYMBOL TEXT,
-            SNAPSHOT_DATE DATE,
-            CLOSE_PRICE REAL,
-            PRIMARY KEY (SYMBOL, SNAPSHOT_DATE)
-        );
-        """)
-
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS OPTION_ANOMALIES (
-            ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            SYMBOL TEXT,
-            SNAPSHOT_DATE DATE,
-            OV_CALL_VOL INTEGER,
-            OV_CALL_BASELINE REAL,
-            OV_CALL_RATIO REAL,
-            OV_TRIGGER_IND INTEGER,
-            OV_PUT_VOL INTEGER,
-            OV_PUT_BASELINE REAL,
-            OV_PUT_RATIO REAL,
-            OV_PUT_TRIGGER_IND INTEGER,
-            SHORT_CALL_VOL INTEGER,
-            SHORT_CALL_BASELINE REAL,
-            SHORT_CALL_RATIO REAL,
-            SHORT_CALL_TRIGGER_IND INTEGER,
-            OTM_CALL_VOL INTEGER,
-            OTM_CALL_BASELINE REAL,
-            OTM_CALL_RATIO REAL,
-            OTM_CALL_TRIGGER_IND INTEGER,
-            OI_CALL_DELTA INTEGER,
-            OI_CALL_BASELINE REAL,
-            OI_CALL_RATIO REAL,
-            OI_CALL_TRIGGER_IND INTEGER,
-            UNIQUE (SYMBOL, SNAPSHOT_DATE)
-        );
-        """)
-        self.conn.commit()
+        Base.metadata.create_all(self.engine)
 
     def fetch_and_store(self):
-        today = date.today().isoformat()
+        today = date.today()
+        session = self.Session()
         for symbol in self.tickers:
             try:
                 tk = yf.Ticker(symbol)
@@ -82,63 +103,75 @@ class YFinanceOptionsTracker:
                     continue
                 close_price = hist['Close'].iloc[-1]
 
-                self.cursor.execute("""
-                    INSERT OR REPLACE INTO STOCK_PRICE_SNAPSHOT (SYMBOL, SNAPSHOT_DATE, CLOSE_PRICE)
-                    VALUES (?, ?, ?)
-                """, (symbol, today, close_price))
+                session.merge(StockPriceSnapshot(
+                    symbol=symbol,
+                    snapshot_date=today,
+                    close_price=close_price
+                ))
 
                 for exp in tk.options:
                     try:
                         oc = tk.option_chain(exp)
                         for side, df in [('CALL', oc.calls), ('PUT', oc.puts)]:
                             for _, r in df.iterrows():
-                                self.cursor.execute("""
-                                INSERT OR IGNORE INTO OPTION_DATA
-                                (SYMBOL, EXPIRATION, CONTRACT_SYMBOL, STRIKE, LAST_PRICE,
-                                 BID, ASK, VOLUME, OPEN_INTEREST, IMPLIED_VOLATILITY,
-                                 SIDE, SNAPSHOT_DATE)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                """, (
-                                    symbol, exp, r.contractSymbol, r.strike,
-                                    r.lastPrice, r.bid, r.ask, r.volume,
-                                    r.openInterest, r.impliedVolatility,
-                                    side, today
+                                session.merge(OptionData(
+                                    symbol=symbol,
+                                    expiration=exp,
+                                    contract_symbol=r.contractSymbol,
+                                    strike=float(r.strike) if not np.isnan(r.strike) else None,
+                                    last_price=float(r.lastPrice) if not np.isnan(r.lastPrice) else None,
+                                    bid=float(r.bid) if not np.isnan(r.bid) else None,
+                                    ask=float(r.ask) if not np.isnan(r.ask) else None,
+                                    volume=int(r.volume) if not np.isnan(r.volume) else 0,
+                                    open_interest=int(r.openInterest) if not np.isnan(r.openInterest) else 0,
+                                    implied_volatility=float(r.impliedVolatility) if not np.isnan(r.impliedVolatility) else None,
+                                    side=side,
+                                    snapshot_date=today
                                 ))
-                        self.conn.commit()
                     except Exception as e:
                         print(f"{symbol} @ {exp} failed: {e}")
                     time.sleep(0.5)
             except Exception as e:
                 print(f"Failed to fetch data for {symbol}: {e}")
-
+        session.commit()
+        session.close()
         print("Data fetch complete for", today)
         self.detect_anomalies(today)
 
     def detect_anomalies(self, today):
-        two_weeks_ago = (date.fromisoformat(today) - timedelta(days=14)).isoformat()
+        session = self.Session()
+        two_weeks_ago = today - timedelta(days=14)
         for symbol in self.tickers:
             try:
-                self.cursor.execute("SELECT CLOSE_PRICE FROM STOCK_PRICE_SNAPSHOT WHERE SYMBOL = ? AND SNAPSHOT_DATE = ?", (symbol, today))
-                row = self.cursor.fetchone()
+                row = session.query(StockPriceSnapshot).filter_by(symbol=symbol, snapshot_date=today).first()
                 if not row:
                     continue
-                close_price = row[0]
+                close_price = row.close_price
 
-                def get_avg_volume(side, filter_clause=""):
-                    q = f"""
-                        SELECT SUM(VOLUME) / COUNT(DISTINCT SNAPSHOT_DATE) FROM OPTION_DATA
-                        WHERE SYMBOL = ? AND SIDE = ? AND SNAPSHOT_DATE BETWEEN ? AND ? {filter_clause}
-                    """
-                    self.cursor.execute(q, (symbol, side, two_weeks_ago, today))
-                    return self.cursor.fetchone()[0] or 0
+                def get_avg_volume(side, filter_clause=None):
+                    q = session.query(OptionData).filter(
+                        OptionData.symbol == symbol,
+                        OptionData.side == side,
+                        OptionData.snapshot_date.between(two_weeks_ago, today)
+                    )
+                    if filter_clause is not None:
+                        q = q.filter(filter_clause)
+                    results = q.all()
+                    return (sum(r.volume for r in results if r.volume) / len(set(r.snapshot_date for r in results))) if results else 0
 
-                def get_today_volume(side, filter_clause=""):
-                    q = f"""
-                        SELECT SUM(VOLUME) FROM OPTION_DATA
-                        WHERE SYMBOL = ? AND SIDE = ? AND SNAPSHOT_DATE = ? {filter_clause}
-                    """
-                    self.cursor.execute(q, (symbol, side, today))
-                    return self.cursor.fetchone()[0] or 0
+                def get_today_volume(side, filter_clause=None):
+                    q = session.query(OptionData).filter(
+                        OptionData.symbol == symbol,
+                        OptionData.side == side,
+                        OptionData.snapshot_date == today
+                    )
+                    if filter_clause is not None:
+                        q = q.filter(filter_clause)
+                    return sum(r.volume for r in q.all() if r.volume)
+
+                from sqlalchemy import and_, cast, Date
+                short_filter = OptionData.expiration <= today + timedelta(days=7)
+                otm_filter = OptionData.strike > close_price * 1.1
 
                 ov_call_base = get_avg_volume('CALL')
                 ov_call_today = get_today_volume('CALL')
@@ -150,92 +183,83 @@ class YFinanceOptionsTracker:
                 ov_put_ratio = ov_put_today / ov_put_base if ov_put_base > 0 else 0
                 ov_put_flag = int(ov_put_ratio >= 5)
 
-                short_filter = "AND julianday(EXPIRATION) - julianday(SNAPSHOT_DATE) < 7"
                 short_call_base = get_avg_volume('CALL', short_filter)
                 short_call_today = get_today_volume('CALL', short_filter)
                 short_call_ratio = short_call_today / short_call_base if short_call_base > 0 else 0
                 short_call_flag = int(short_call_ratio >= 5)
 
-                otm_filter = f"AND STRIKE > {close_price * 1.1}"
                 otm_call_base = get_avg_volume('CALL', otm_filter)
                 otm_call_today = get_today_volume('CALL', otm_filter)
                 otm_call_ratio = otm_call_today / otm_call_base if otm_call_base > 0 else 0
                 otm_call_flag = int(otm_call_ratio >= 5)
 
-                self.cursor.execute("""
-                    SELECT SUM(OPEN_INTEREST) FROM OPTION_DATA
-                    WHERE SYMBOL = ? AND SIDE = 'CALL' AND SNAPSHOT_DATE = ?
-                """, (symbol, today))
-                oi_today = self.cursor.fetchone()[0] or 0
-
-                yesterday = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
-                self.cursor.execute("""
-                    SELECT SUM(OPEN_INTEREST) FROM OPTION_DATA
-                    WHERE SYMBOL = ? AND SIDE = 'CALL' AND SNAPSHOT_DATE = ?
-                """, (symbol, yesterday))
-                oi_yesterday = self.cursor.fetchone()[0] or 0
-
+                oi_today = sum(r.open_interest for r in session.query(OptionData).filter_by(symbol=symbol, side='CALL', snapshot_date=today).all())
+                yesterday = today - timedelta(days=1)
+                oi_yesterday = sum(r.open_interest for r in session.query(OptionData).filter_by(symbol=symbol, side='CALL', snapshot_date=yesterday).all())
                 oi_delta = oi_today - oi_yesterday
                 oi_base = oi_yesterday if oi_yesterday > 0 else 1
                 oi_ratio = oi_today / oi_base if oi_base > 1 else 1
                 oi_flag = int(oi_ratio >= 2)
 
-                self.cursor.execute("""
-                    INSERT OR IGNORE INTO OPTION_ANOMALIES
-                    (SYMBOL, SNAPSHOT_DATE,
-                     OV_CALL_VOL, OV_CALL_BASELINE, OV_CALL_RATIO, OV_TRIGGER_IND,
-                     OV_PUT_VOL, OV_PUT_BASELINE, OV_PUT_RATIO, OV_PUT_TRIGGER_IND,
-                     SHORT_CALL_VOL, SHORT_CALL_BASELINE, SHORT_CALL_RATIO, SHORT_CALL_TRIGGER_IND,
-                     OTM_CALL_VOL, OTM_CALL_BASELINE, OTM_CALL_RATIO, OTM_CALL_TRIGGER_IND,
-                     OI_CALL_DELTA, OI_CALL_BASELINE, OI_CALL_RATIO, OI_CALL_TRIGGER_IND)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    symbol, today,
-                    ov_call_today, ov_call_base, ov_call_ratio, ov_call_flag,
-                    ov_put_today, ov_put_base, ov_put_ratio, ov_put_flag,
-                    short_call_today, short_call_base, short_call_ratio, short_call_flag,
-                    otm_call_today, otm_call_base, otm_call_ratio, otm_call_flag,
-                    oi_delta, oi_base, oi_ratio, oi_flag
-                ))
-                self.conn.commit()
+                anomaly = OptionAnomaly(
+                    symbol=symbol,
+                    snapshot_date=today,
+                    ov_call_vol=ov_call_today,
+                    ov_call_baseline=ov_call_base,
+                    ov_call_ratio=ov_call_ratio,
+                    ov_trigger_ind=ov_call_flag,
+                    ov_put_vol=ov_put_today,
+                    ov_put_baseline=ov_put_base,
+                    ov_put_ratio=ov_put_ratio,
+                    ov_put_trigger_ind=ov_put_flag,
+                    short_call_vol=short_call_today,
+                    short_call_baseline=short_call_base,
+                    short_call_ratio=short_call_ratio,
+                    short_call_trigger_ind=short_call_flag,
+                    otm_call_vol=otm_call_today,
+                    otm_call_baseline=otm_call_base,
+                    otm_call_ratio=otm_call_ratio,
+                    otm_call_trigger_ind=otm_call_flag,
+                    oi_call_delta=oi_delta,
+                    oi_call_baseline=oi_base,
+                    oi_call_ratio=oi_ratio,
+                    oi_call_trigger_ind=oi_flag
+                )
+                session.merge(anomaly)
+                session.commit()
             except Exception as e:
                 print(f"Anomaly check failed for {symbol}: {e}")
+        session.close()
 
     def send_alert_email(self, snapshot_date, smtp_server, smtp_port, sender_email, sender_password, recipient_email):
-        # Fetch all tickers with any trigger == 1
-        query = f'''
-            SELECT SYMBOL, 
-                OV_CALL_VOL, OV_CALL_BASELINE, OV_CALL_RATIO, OV_TRIGGER_IND,
-                OV_PUT_VOL, OV_PUT_BASELINE, OV_PUT_RATIO, OV_PUT_TRIGGER_IND,
-                SHORT_CALL_VOL, SHORT_CALL_BASELINE, SHORT_CALL_RATIO, SHORT_CALL_TRIGGER_IND,
-                OTM_CALL_VOL, OTM_CALL_BASELINE, OTM_CALL_RATIO, OTM_CALL_TRIGGER_IND,
-                OI_CALL_DELTA, OI_CALL_BASELINE, OI_CALL_RATIO, OI_CALL_TRIGGER_IND
-            FROM OPTION_ANOMALIES
-            WHERE SNAPSHOT_DATE = ?
-            AND (OV_TRIGGER_IND = 1 OR OV_PUT_TRIGGER_IND = 1 OR SHORT_CALL_TRIGGER_IND = 1 OR OTM_CALL_TRIGGER_IND = 1 OR OI_CALL_TRIGGER_IND = 1)
-        '''
-        self.cursor.execute(query, (snapshot_date,))
-        rows = self.cursor.fetchall()
+        session = self.Session()
+        anomalies = session.query(OptionAnomaly).filter(
+            OptionAnomaly.snapshot_date == snapshot_date,
+            (OptionAnomaly.ov_trigger_ind == 1) |
+            (OptionAnomaly.ov_put_trigger_ind == 1) |
+            (OptionAnomaly.short_call_trigger_ind == 1) |
+            (OptionAnomaly.otm_call_trigger_ind == 1) |
+            (OptionAnomaly.oi_call_trigger_ind == 1)
+        ).all()
 
         msg = EmailMessage()
         msg['From'] = sender_email
         msg['To'] = recipient_email
 
-        if not rows:
+        if not anomalies:
             print("No anomalies triggered today.")
             msg['Subject'] = f"No Anomalies Detected for {snapshot_date}"
             msg.set_content(f"No unusual options activity was detected for {snapshot_date}.")
         else:
             msg['Subject'] = f"Options Anomaly Alerts for {snapshot_date}"
-            body = f"Anomalies detected for {len(rows)} ticker(s):\n\n"
-            for row in rows:
-                sym = row[0]
-                body += f"\n🔹 {sym}\n"
-                body += f"  OV_CALL_VOL: {row[1]} (x{row[3]:.1f}) {'✅' if row[4] else ''}\n"
-                body += f"  OV_PUT_VOL:  {row[5]} (x{row[7]:.1f}) {'✅' if row[8] else ''}\n"
-                body += f"  SHORT_CALL_VOL: {row[9]} (x{row[11]:.1f}) {'✅' if row[12] else ''}\n"
-                body += f"  OTM_CALL_VOL:   {row[13]} (x{row[15]:.1f}) {'✅' if row[16] else ''}\n"
-                body += f"  OI_CALL_DELTA:  {row[17]} (x{row[19]:.1f}) {'✅' if row[20] else ''}\n"
+            body = f"Anomalies detected for {len(anomalies)} ticker(s):\n\n"
+            for row in anomalies:
+                body += f"\n🔹 {row.symbol}\n"
+                body += f"  OV_CALL_VOL: {row.ov_call_vol} (x{row.ov_call_ratio:.1f}) {'✅' if row.ov_trigger_ind else ''}\n"
+                body += f"  OV_PUT_VOL:  {row.ov_put_vol} (x{row.ov_put_ratio:.1f}) {'✅' if row.ov_put_trigger_ind else ''}\n"
+                body += f"  SHORT_CALL_VOL: {row.short_call_vol} (x{row.short_call_ratio:.1f}) {'✅' if row.short_call_trigger_ind else ''}\n"
+                body += f"  OTM_CALL_VOL:   {row.otm_call_vol} (x{row.otm_call_ratio:.1f}) {'✅' if row.otm_call_trigger_ind else ''}\n"
+                body += f"  OI_CALL_DELTA:  {row.oi_call_delta} (x{row.oi_call_ratio:.1f}) {'✅' if row.oi_call_trigger_ind else ''}\n"
             msg.set_content(body)
 
         try:
@@ -246,6 +270,3 @@ class YFinanceOptionsTracker:
         except Exception as e:
             print("Failed to send email:")
             traceback.print_exc()
-
-    def close(self):
-        self.conn.close()

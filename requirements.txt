@@ -1,0 +1,7 @@
+yfinance
+sqlalchemy
+pandas
+python-dotenv
+streamlit
+psycopg2-binary
+requests

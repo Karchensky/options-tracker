@@ -5,3 +5,4 @@ python-dotenv
 streamlit
 psycopg2-binary
 requests
+lxml

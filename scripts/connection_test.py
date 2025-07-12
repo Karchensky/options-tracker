@@ -1,15 +1,8 @@
-import os
 from sqlalchemy import create_engine, NullPool
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Database connection details
-DB_URL = os.getenv("SUPABASE_DB_URL")  # This is now fully ready-to-go
+from config import SUPABASE_DB_URL
 
 engine = create_engine(
-    DB_URL,
+    SUPABASE_DB_URL,
     pool_pre_ping=True,  # Detect broken connections and reconnect automatically
     poolclass=NullPool   # Avoid maintaining persistent connections
 )

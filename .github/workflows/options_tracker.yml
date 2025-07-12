@@ -9,12 +9,18 @@ jobs:
   run-tracker:
     runs-on: ubuntu-latest
 
+  env:
+    SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+    EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+    RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -23,10 +29,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Options Tracker
-        env:
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: python runner.py
+      - name: Run options tracker
+        run: python scripts/runner.py

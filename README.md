@@ -16,7 +16,7 @@ If this ends up being worthwhile I'll host the daily results/notifications somew
 
     GitHub (repo: options-tracker)
                             |
-                            | (1) GitHub Action triggers at 4:30PM EST (Mon–Fri)
+                            |  - (Step #1) GitHub Action triggers at 4:30PM EST (Mon–Fri)
                             |
                runner.py runs in GitHub-hosted container
                             |
@@ -26,8 +26,8 @@ If this ends up being worthwhile I'll host the daily results/notifications somew
                             | - Sends email alert
                             |
                     -   All results saved to Supabase
-
-    |
-                                | (2) Streamlit app pulls from Supabase
+                                |
+                                | - (Step #2) Streamlit app pulls from Supabase
                                 |
                         -   Public Dashboard for browsing alerts
+                        

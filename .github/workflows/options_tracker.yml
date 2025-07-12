@@ -8,12 +8,11 @@ on:
 jobs:
   run-tracker:
     runs-on: ubuntu-latest
-
-  env:
-    SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-    EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-    EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-    RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
 
     steps:
       - name: Checkout repository

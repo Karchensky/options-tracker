@@ -1,6 +1,6 @@
 # runner.py
 
-from options_tracker import YFinanceOptionsTracker
+from options_tracker import SupabaseOptionTracker
 from ticker_list import save_sp1500_tickers
 import pandas as pd
 from datetime import date
@@ -19,16 +19,15 @@ save_sp1500_tickers("sp1500_tickers.csv")
 # Step 2: Load the list
 tickers = pd.read_csv("sp1500_tickers.csv")['Symbol'].dropna().tolist()
 
-# Step 3: Run the options tracker
-tracker = YFinanceOptionsTracker(db_path="options_data.db", tickers=tickers)
-# tracker = YFinanceOptionsTracker(db_path="options_data.db", tickers=['AAPL', 'MSFT', 'GOOGL','ABBV'])  # Example tickers
+# Step 3: Run the Supabase-powered options tracker
+# tracker = SupabaseOptionTracker(tickers=tickers)
+tracker = SupabaseOptionTracker(tickers=['AAPL', 'MSFT'])  # Example tickers
 tracker.fetch_and_store()
 tracker.send_alert_email(
-    snapshot_date=date.today().isoformat(),
+    snapshot_date=date.today(),
     smtp_server='smtp.gmail.com',
     smtp_port=465,
     sender_email=SENDER_EMAIL,
     sender_password=EMAIL_PASSWORD,
     recipient_email=RECIPIENT_EMAIL
-)
-tracker.close()
+)  

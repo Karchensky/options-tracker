@@ -13,8 +13,8 @@ save_sp1500_tickers("sp1500_tickers.csv")
 tickers = pd.read_csv("sp1500_tickers.csv")['Symbol'].dropna().tolist()
 
 # Step 3: Run the Supabase-powered options tracker
-# tracker = SupabaseOptionTracker(SUPABASE_DB_URL, tickers=tickers)
-tracker = SupabaseOptionTracker(SUPABASE_DB_URL, tickers=['AAPL', 'MSFT'])  # Example tickers
+# tracker = SupabaseOptionTracker(SUPABASE_DB_URL, tickers=['AAPL', 'MSFT'])  # Example tickers
+tracker = SupabaseOptionTracker(SUPABASE_DB_URL, tickers=tickers)
 tracker.fetch_and_store()
 tracker.send_alert_email(
     snapshot_date=date.today(),

@@ -6,3 +6,4 @@ streamlit
 psycopg2-binary
 requests
 lxml
+altair

@@ -103,6 +103,17 @@ class SupabaseOptionTracker:
         )
         session.execute(stmt)
 
+    def try_upsert_with_retry(self, session, model, data, conflict_cols, update_cols, retries=3):
+        for attempt in range(1, retries + 1):
+            try:
+                self.upsert(session, model, data, conflict_cols, update_cols)
+                return True  # success
+            except Exception as e:
+                print(f"Attempt {attempt} failed for {data.get('contract_symbol', 'n/a')}: {e}")
+                session.rollback()
+                time.sleep(0.5 * attempt)  # slight backoff
+        return False  # all retries failed
+
     def fetch_and_store(self):
         today = date.today()
         session = self.Session()
@@ -131,7 +142,7 @@ class SupabaseOptionTracker:
                         oc = tk.option_chain(exp)
                         for side, df in [('CALL', oc.calls), ('PUT', oc.puts)]:
                             for _, r in df.iterrows():
-                                self.upsert(
+                                success = self.try_upsert_with_retry(
                                     session,
                                     OptionData,
                                     {
@@ -154,12 +165,16 @@ class SupabaseOptionTracker:
                                         "volume", "open_interest", "implied_volatility", "side"
                                     ]
                                 )
+                                if not success:
+                                    print(f"Gave up on {symbol} @ {exp} ({r.contractSymbol}) after 3 tries")
                     except Exception as e:
                         print(f"{symbol} @ {exp} failed: {e}")
+                        session.rollback()
                     time.sleep(0.5)
                 print(f"Fetched {symbol} successfully")
             except Exception as e:
                 print(f"Failed to fetch data for {symbol}: {e}")
+                session.rollback()
         session.commit()
         session.close()
         print("Data fetch complete for", today)

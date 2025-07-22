@@ -1,6 +1,6 @@
-name: Run Options Tracker
+# name: Run Options Tracker
 
-on:
+x-on:
   schedule:
     - cron: '45 21 * * 1-5'  # Mon–Fri at 5:45PM EST/EDT
   workflow_dispatch:  # allows manual trigger
@@ -30,4 +30,3 @@ jobs:
 
       - name: Run options tracker
         run: python scripts/runner.py
-        

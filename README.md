@@ -50,7 +50,7 @@ The system detects several types of suspicious options activity:
 7. Run system: `python runner.py`
 
 ### Automated Deployment
-1. Set up GitHub Actions: Add required secrets to repository
+1. Set up GitHub Actions: Add secrets (see `.github/workflows/setup-secrets.md`)
 2. Deploy to Streamlit Cloud: Connect repository to [share.streamlit.io](https://share.streamlit.io)
 3. Monitor: Check GitHub Actions tab for automated runs
 
@@ -344,7 +344,7 @@ python -c "from core.options_tracker import options_tracker; options_tracker.run
 
 The system runs automatically Monday-Friday at 4:30 PM EST (after market close at 4:00 PM):
 
-1. **Set up secrets**: Add required secrets to GitHub repository (see GitHub Actions section)
+1. **Set up secrets**: Add required secrets to GitHub repository (see `.github/workflows/setup-secrets.md`)
 2. **Monitor runs**: Check Actions tab in your repository
 3. **Manual trigger**: Available in GitHub Actions tab
 

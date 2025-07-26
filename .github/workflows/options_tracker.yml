@@ -158,7 +158,7 @@ jobs:
     steps:
       - name: Success notification
         run: |
-          echo "✅ Options tracker completed successfully"
+          echo "Options tracker completed successfully"
           echo "Check your email for anomaly alerts"
 
   notify-failure:
@@ -169,6 +169,6 @@ jobs:
     steps:
       - name: Failure notification
         run: |
-          echo "❌ Options tracker failed"
+          echo "Options tracker failed"
           echo "Check the logs and GitHub Actions for details"
-        
+       

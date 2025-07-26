@@ -14,15 +14,6 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
-  SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-  SUPABASE_API_KEY: ${{ secrets.SUPABASE_API_KEY }}
-  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-  SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-  EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-  RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-  POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-  ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-  QUANDL_API_KEY: ${{ secrets.QUANDL_API_KEY }}
 
 jobs:
   test:
@@ -91,6 +82,15 @@ jobs:
         run: python runner.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_API_KEY: ${{ secrets.SUPABASE_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          QUANDL_API_KEY: ${{ secrets.QUANDL_API_KEY }}
 
       - name: Upload logs
         if: always()

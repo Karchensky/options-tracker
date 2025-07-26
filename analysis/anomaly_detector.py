@@ -60,12 +60,21 @@ class AnomalyDetector:
         self.short_term_days = config.SHORT_TERM_DAYS
         self.otm_percentage = config.OTM_PERCENTAGE
         
-        # Initialize ML models
+        # Initialize ML models with better parameters for options data
         self.isolation_forest = IsolationForest(
-            contamination=0.1,
-            random_state=42
+            contamination=0.05,  # Lower contamination for more precise detection
+            random_state=42,
+            n_estimators=100,  # More trees for better accuracy
+            max_samples='auto'
         )
         self.scaler = StandardScaler()
+        
+        # Additional parameters for options-specific detection
+        self.min_data_points = 5  # Minimum data points needed for baseline
+        self.volume_weight = 0.4   # Weight for volume anomalies
+        self.oi_weight = 0.3       # Weight for open interest anomalies
+        self.short_term_weight = 0.2  # Weight for short-term anomalies
+        self.otm_weight = 0.1      # Weight for OTM anomalies
     
     def detect_anomalies(self, symbol: str, snapshot_date: date, 
                         options_data: List, stock_price: float,
@@ -209,16 +218,32 @@ class AnomalyDetector:
         }
     
     def _calculate_volume_baseline(self, historical_data: pd.DataFrame, option_type: str) -> float:
-        """Calculate baseline volume from historical data."""
+        """Calculate baseline volume from historical data with outlier removal."""
         if historical_data.empty:
-            return 0
+            return 0.0
         
-        # Filter for option type and calculate average volume
+        # Filter for option type
         type_data = historical_data[historical_data['option_type'] == option_type]
-        if type_data.empty:
-            return 0
+        if type_data.empty or len(type_data) < self.min_data_points:
+            return 0.0
         
-        return type_data['volume'].mean()
+        # Remove outliers using IQR method
+        Q1 = type_data['volume'].quantile(0.25)
+        Q3 = type_data['volume'].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        
+        filtered_data = type_data[
+            (type_data['volume'] >= lower_bound) & 
+            (type_data['volume'] <= upper_bound)
+        ]
+        
+        if filtered_data.empty:
+            return type_data['volume'].median()
+        
+        # Calculate median volume (more robust than mean)
+        return filtered_data['volume'].median()
     
     def _calculate_short_term_baseline(self, historical_data: pd.DataFrame, option_type: str) -> float:
         """Calculate baseline for short-term options."""
@@ -295,8 +320,29 @@ class AnomalyDetector:
                                      otm_anomalies: Dict, oi_anomalies: Dict) -> float:
         """Calculate probability of insider trading based on anomalies."""
         
-        # This is a simplified model - in practice, you'd want a more sophisticated ML model
-        probability = 0.0
+        # Weighted scoring system based on different anomaly types
+        score = 0.0
+        
+        # Volume anomalies (40% weight)
+        if volume_anomalies['call_volume_trigger']:
+            score += self.volume_weight * min(volume_anomalies['call_volume_ratio'] / self.volume_threshold, 2.0)
+        if volume_anomalies['put_volume_trigger']:
+            score += self.volume_weight * min(volume_anomalies['put_volume_ratio'] / self.volume_threshold, 2.0)
+        
+        # Open Interest anomalies (30% weight)
+        if oi_anomalies['call_oi_trigger']:
+            score += self.oi_weight * min(oi_anomalies['call_oi_ratio'] / self.oi_threshold, 2.0)
+        
+        # Short-term anomalies (20% weight)
+        if short_term_anomalies['short_term_call_trigger']:
+            score += self.short_term_weight * min(short_term_anomalies['short_term_call_ratio'] / self.volume_threshold, 2.0)
+        
+        # OTM anomalies (10% weight)
+        if otm_anomalies['otm_call_trigger']:
+            score += self.otm_weight * min(otm_anomalies['otm_call_ratio'] / self.volume_threshold, 2.0)
+        
+        # Convert score to probability (0-1 range)
+        probability = min(score, 1.0)
         
         # Base probability from volume anomalies
         if volume_anomalies['call_volume_trigger']:

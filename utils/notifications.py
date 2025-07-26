@@ -41,9 +41,9 @@ class NotificationManager:
             return False
     
     def _create_anomaly_email_content(self, anomalies: List, target_date: date) -> str:
-        """Create email content for anomaly alert."""
+        """Create simplified, more reliable email content."""
         
-        # Sort anomalies by insider probability (highest first)
+        # Sort anomalies by insider probability
         sorted_anomalies = sorted(anomalies, key=lambda x: x.insider_probability, reverse=True)
         
         content = f"""
@@ -52,19 +52,16 @@ class NotificationManager:
             <style>
                 body {{ font-family: Arial, sans-serif; margin: 20px; }}
                 .header {{ background-color: #f0f0f0; padding: 10px; border-radius: 5px; }}
-                .anomaly {{ margin: 10px 0; padding: 10px; border-left: 4px solid #ff6b6b; background-color: #fff5f5; }}
-                .high-risk {{ border-left-color: #ff0000; background-color: #ffe6e6; }}
-                .medium-risk {{ border-left-color: #ffa500; background-color: #fff8e6; }}
-                .low-risk {{ border-left-color: #ffff00; background-color: #fffff0; }}
-                .metric {{ margin: 5px 0; }}
-                .trigger {{ font-weight: bold; color: #ff0000; }}
+                .anomaly {{ margin: 10px 0; padding: 10px; border-left: 4px solid #ff6b6b; }}
+                .high-risk {{ border-left-color: #ff0000; }}
+                .medium-risk {{ border-left-color: #ffa500; }}
+                .low-risk {{ border-left-color: #ffff00; }}
             </style>
         </head>
         <body>
             <div class="header">
-                <h2>Options Anomaly Alert</h2>
-                <p><strong>Date:</strong> {target_date}</p>
-                <p><strong>Total Anomalies:</strong> {len(anomalies)}</p>
+                <h2>Options Anomaly Alert - {target_date}</h2>
+                <p>Total Anomalies: {len(anomalies)}</p>
             </div>
         """
         
@@ -73,8 +70,7 @@ class NotificationManager:
         else:
             content += "<h3>Detected Anomalies:</h3>"
             
-            for anomaly in sorted_anomalies:
-                # Determine risk level
+            for anomaly in sorted_anomalies[:10]:  # Limit to top 10
                 if anomaly.insider_probability >= 0.7:
                     risk_class = "high-risk"
                     risk_level = "HIGH"
@@ -87,23 +83,10 @@ class NotificationManager:
                 
                 content += f"""
                 <div class="anomaly {risk_class}">
-                    <h4>{risk_level} RISK - {anomaly.stock.symbol} - {anomaly.insider_probability:.1%} Insider Probability</h4>
-                    <div class="metric"><strong>Unusual Activity Score:</strong> {anomaly.unusual_activity_score:.2f}</div>
-                    <div class="metric"><strong>Notes:</strong> {anomaly.notes}</div>
-                    
-                    <h5>Volume Anomalies:</h5>
-                    <div class="metric">Call Volume: {anomaly.call_volume:,} (Baseline: {anomaly.call_volume_baseline:.0f}) 
-                    <span class="trigger">{'ALERT' if anomaly.call_volume_trigger else ''}</span></div>
-                    <div class="metric">Put Volume: {anomaly.put_volume:,} (Baseline: {anomaly.put_volume_baseline:.0f})
-                    <span class="trigger">{'ALERT' if anomaly.put_volume_trigger else ''}</span></div>
-                    
-                    <h5>Special Anomalies:</h5>
-                    <div class="metric">Short-term Calls: {anomaly.short_term_call_volume:,} 
-                    <span class="trigger">{'ALERT' if anomaly.short_term_call_trigger else ''}</span></div>
-                    <div class="metric">OTM Calls: {anomaly.otm_call_volume:,}
-                    <span class="trigger">{'ALERT' if anomaly.otm_call_trigger else ''}</span></div>
-                    <div class="metric">OI Delta: {anomaly.call_oi_delta:,}
-                    <span class="trigger">{'ALERT' if anomaly.call_oi_trigger else ''}</span></div>
+                    <h4>{risk_level} RISK - {anomaly.stock.symbol}</h4>
+                    <p>Insider Probability: {anomaly.insider_probability:.1%}</p>
+                    <p>Activity Score: {anomaly.unusual_activity_score:.2f}</p>
+                    <p>Notes: {anomaly.notes}</p>
                 </div>
                 """
         

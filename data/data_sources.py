@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, date, timedelta
 from config import config
 from data.models import StockData, OptionsData
+from utils.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class PolygonDataSource:
     def get_stock_price(self, symbol: str, date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('polygon')
+            
             url = f"{self.base_url}/v2/aggs/ticker/{symbol}/range/1/day/{date}/{date}"
             params = {'adjusted': 'true'}
             
@@ -52,9 +56,12 @@ class PolygonDataSource:
     def get_options_chain(self, symbol: str, expiration_date: date) -> List[OptionsData]:
         """Get options chain for a specific expiration date."""
         try:
-            url = f"{self.base_url}/v3/reference/options/contracts"
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('polygon')
+            
+            # Use the correct Polygon.io options snapshot endpoint
+            url = f"{self.base_url}/v3/snapshot/options/{symbol}"
             params = {
-                'underlying_ticker': symbol,
                 'expiration_date': expiration_date.strftime('%Y-%m-%d'),
                 'limit': 1000
             }
@@ -67,10 +74,20 @@ class PolygonDataSource:
                 
                 options_data = []
                 for contract in results:
-                    # Get detailed options data
-                    detailed_data = self._get_option_details(contract['ticker'])
-                    if detailed_data:
-                        options_data.append(detailed_data)
+                    # Parse contract data properly
+                    options_data.append(OptionsData(
+                        symbol=symbol,
+                        expiration=expiration_date,
+                        strike=contract.get('strike_price', 0),
+                        option_type=contract.get('contract_type', 'CALL'),
+                        last_price=contract.get('last_price', 0),
+                        bid=contract.get('bid', 0),
+                        ask=contract.get('ask', 0),
+                        volume=contract.get('day_volume', 0),
+                        open_interest=contract.get('open_interest', 0),
+                        implied_volatility=contract.get('implied_volatility', 0),
+                        contract_symbol=contract.get('ticker', '')
+                    ))
                 
                 return options_data
             
@@ -140,6 +157,9 @@ class AlphaVantageDataSource:
     def get_stock_price(self, symbol: str, date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('alpha_vantage')
+            
             params = {
                 'function': 'TIME_SERIES_DAILY',
                 'symbol': symbol,
@@ -187,6 +207,11 @@ class DataSourceManager:
         # Always add Yahoo Finance as fallback
         from data.yahoo_finance_source import yahoo_finance_source
         self.sources['yahoo_finance'] = yahoo_finance_source
+        
+        # Add Quandl if API key is available
+        if config.QUANDL_API_KEY:
+            from data.quandl_source import QuandlDataSource
+            self.sources['quandl'] = QuandlDataSource(config.QUANDL_API_KEY)
     
     def get_stock_price(self, symbol: str, target_date: date) -> Optional[StockData]:
         """Get stock price from available sources with fallback."""
@@ -255,6 +280,18 @@ class DataSourceManager:
             except Exception as e:
                 logger.error(f"Error getting options data from alpha_vantage: {e}")
         
+        # Fallback to Quandl if available
+        if 'quandl' in self.sources and hasattr(self.sources['quandl'], 'get_options_chain'):
+            try:
+                logger.info(f"Trying quandl for {symbol} options")
+                data = self.sources['quandl'].get_options_chain(symbol, expiration_date)
+                if data and any(opt.volume > 0 or opt.open_interest > 0 for opt in data):
+                    logger.info(f"Successfully got options data from quandl")
+                    return data
+                time.sleep(config.RATE_LIMIT_DELAY)
+            except Exception as e:
+                logger.error(f"Error getting options data from quandl: {e}")
+        
         # Fallback to Yahoo Finance
         if 'yahoo_finance' in self.sources and hasattr(self.sources['yahoo_finance'], 'get_options_chain'):
             try:
@@ -266,25 +303,6 @@ class DataSourceManager:
                 time.sleep(config.RATE_LIMIT_DELAY)
             except Exception as e:
                 logger.error(f"Error getting options data from yahoo_finance: {e}")
-        
-        # Fallback to mock data for testing
-        logger.info(f"Using mock options data for {symbol}")
-        try:
-            from data.mock_options_source import mock_options_source
-            # Get stock price for the target date or use a reasonable default
-            stock_data = self.get_stock_price(symbol, date.today())
-            if not stock_data:
-                # Use a reasonable default price based on symbol
-                default_prices = {'AAPL': 213.88, 'MSFT': 513.71, 'TSLA': 316.06, 'NVDA': 154.31, 'AMD': 180.50}
-                stock_price = default_prices.get(symbol, 100.0)
-            else:
-                stock_price = stock_data.close_price
-            
-            mock_data = mock_options_source.generate_options_data(symbol, expiration_date, stock_price)
-            logger.info(f"Generated {len(mock_data)} mock options contracts")
-            return mock_data
-        except Exception as e:
-            logger.error(f"Error generating mock options data: {e}")
         
         logger.warning(f"Failed to get options data for {symbol} from all sources")
         return []

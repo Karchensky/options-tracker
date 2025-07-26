@@ -154,7 +154,10 @@ class OptionsTracker:
     
     def _store_options_data(self, stock: Stock, options_data: List, target_date: date):
         """Store options data."""
-        for option in options_data:
+        # Validate options data before storage
+        validated_data = self._validate_options_data(options_data)
+        
+        for option in validated_data:
             # Check if we already have this contract for this date
             existing = self.session.query(OptionData).filter_by(
                 contract_symbol=option.contract_symbol,
@@ -173,7 +176,7 @@ class OptionsTracker:
                 existing.gamma = option.gamma
                 existing.theta = option.theta
                 existing.vega = option.vega
-                existing.data_source = "polygon"  # or get from option
+                existing.data_source = getattr(option, 'data_source', 'unknown')
             else:
                 # Create new record
                 option_record = OptionData(
@@ -193,7 +196,7 @@ class OptionsTracker:
                     theta=option.theta,
                     vega=option.vega,
                     snapshot_date=target_date,
-                    data_source="polygon"  # or get from option
+                    data_source=getattr(option, 'data_source', 'unknown')
                 )
                 self.session.add(option_record)
     
@@ -241,14 +244,17 @@ class OptionsTracker:
             except Exception as e:
                 logger.error(f"Error detecting anomalies for {stock.symbol}: {e}")
     
-    def _get_historical_data(self, stock_id: int, target_date: date, days: int = 14) -> pd.DataFrame:
+    def _get_historical_data(self, stock_id: int, target_date: date, days: int = 30) -> pd.DataFrame:
         """Get historical options data for baseline calculation."""
+        # Increase from 14 to 30 days for better baseline
         start_date = target_date - timedelta(days=days)
         
+        # Add more sophisticated filtering
         query = self.session.query(OptionData).filter(
             OptionData.stock_id == stock_id,
             OptionData.snapshot_date >= start_date,
-            OptionData.snapshot_date < target_date
+            OptionData.snapshot_date < target_date,
+            OptionData.volume > 0  # Only include active options
         )
         
         results = query.all()
@@ -256,7 +262,7 @@ class OptionsTracker:
         if not results:
             return pd.DataFrame()
         
-        # Convert to DataFrame
+        # Convert to DataFrame with better structure
         data = []
         for result in results:
             data.append({
@@ -265,11 +271,28 @@ class OptionsTracker:
                 'option_type': result.option_type,
                 'volume': result.volume,
                 'open_interest': result.open_interest,
-                'snapshot_date': result.snapshot_date
+                'snapshot_date': result.snapshot_date,
+                'days_to_expiration': (result.expiration - result.snapshot_date).days
             })
         
         return pd.DataFrame(data)
     
+    def _validate_options_data(self, options_data: List) -> List:
+        """Validate options data before storage."""
+        validated_data = []
+        
+        for option in options_data:
+            # Basic validation
+            if (option.volume is not None and option.volume < 0) or \
+               (option.open_interest is not None and option.open_interest < 0) or \
+               option.strike <= 0:
+                logger.warning(f"Invalid options data for {option.contract_symbol}")
+                continue
+            
+            validated_data.append(option)
+        
+        return validated_data
+
     def _store_anomaly_result(self, stock: Stock, anomaly_result):
         """Store anomaly detection result."""
         # Check if we already have an anomaly record for this date

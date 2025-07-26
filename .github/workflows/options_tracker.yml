@@ -137,17 +137,22 @@ jobs:
           from database.connection import db_manager
           from sqlalchemy import text
           
-          # Check if today's data was collected
+          # Check if options data was collected today
           with db_manager.get_session() as session:
-              result = session.execute(text('SELECT COUNT(*) FROM option_anomalies WHERE snapshot_date = CURRENT_DATE'))
+              result = session.execute(text('SELECT COUNT(*) FROM option_data WHERE snapshot_date = CURRENT_DATE'))
               count = result.scalar()
-              print(f'Anomalies detected today: {count}')
+              print(f'Options records collected today: {count}')
               
               if count == 0:
-                  print('WARNING: No anomalies detected today. This might indicate an issue.')
+                  print('WARNING: No options data collected today. This might indicate an issue.')
                   exit(1)
               else:
-                  print('Health check passed - data collected successfully')
+                  print('Health check passed - options data collected successfully')
+                  
+              # Also check for anomalies (but don't fail if none found)
+              result = session.execute(text('SELECT COUNT(*) FROM option_anomalies WHERE snapshot_date = CURRENT_DATE'))
+              anomaly_count = result.scalar()
+              print(f'Anomalies detected today: {anomaly_count}')
           "
 
   notify-success:

@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, date, timedelta
 from config import config
 from data.models import StockData, OptionsData
+from utils.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class PolygonDataSource:
     def get_stock_price(self, symbol: str, date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('polygon')
+            
             url = f"{self.base_url}/v2/aggs/ticker/{symbol}/range/1/day/{date}/{date}"
             params = {'adjusted': 'true'}
             
@@ -52,9 +56,12 @@ class PolygonDataSource:
     def get_options_chain(self, symbol: str, expiration_date: date) -> List[OptionsData]:
         """Get options chain for a specific expiration date."""
         try:
-            url = f"{self.base_url}/v3/reference/options/contracts"
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('polygon')
+            
+            # Use the correct Polygon.io options snapshot endpoint
+            url = f"{self.base_url}/v3/snapshot/options/{symbol}"
             params = {
-                'underlying_ticker': symbol,
                 'expiration_date': expiration_date.strftime('%Y-%m-%d'),
                 'limit': 1000
             }
@@ -67,10 +74,20 @@ class PolygonDataSource:
                 
                 options_data = []
                 for contract in results:
-                    # Get detailed options data
-                    detailed_data = self._get_option_details(contract['ticker'])
-                    if detailed_data:
-                        options_data.append(detailed_data)
+                    # Parse contract data properly
+                    options_data.append(OptionsData(
+                        symbol=symbol,
+                        expiration=expiration_date,
+                        strike=contract.get('strike_price', 0),
+                        option_type=contract.get('contract_type', 'CALL'),
+                        last_price=contract.get('last_price', 0),
+                        bid=contract.get('bid', 0),
+                        ask=contract.get('ask', 0),
+                        volume=contract.get('day_volume', 0),
+                        open_interest=contract.get('open_interest', 0),
+                        implied_volatility=contract.get('implied_volatility', 0),
+                        contract_symbol=contract.get('ticker', '')
+                    ))
                 
                 return options_data
             
@@ -140,6 +157,9 @@ class AlphaVantageDataSource:
     def get_stock_price(self, symbol: str, date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('alpha_vantage')
+            
             params = {
                 'function': 'TIME_SERIES_DAILY',
                 'symbol': symbol,

@@ -7,6 +7,7 @@ Main entry point for the options tracking system.
 import logging
 import sys
 import os
+import time
 from datetime import datetime, date
 import pytz
 import pandas as pd
@@ -21,6 +22,8 @@ from database.connection import db_manager
 from data.ticker_manager import ticker_manager
 from core.options_tracker import options_tracker
 from utils.notifications import NotificationManager
+from utils.data_source_tester import data_source_tester
+from utils.rate_limiter import rate_limiter
 
 # Configure logging
 logging.basicConfig(
@@ -107,19 +110,37 @@ def test_connections():
         logger.error("Database connection failed")
         return False
     
-    # Test data source connections
-    data_sources = config.get_data_source_priority()
-    for source in data_sources:
-        if hasattr(options_tracker, '_test_data_source'):
-            if not options_tracker._test_data_source(source):
-                logger.warning(f"Data source {source} connection failed")
+    # Test data sources comprehensively
+    logger.info("Testing data sources...")
+    if not data_source_tester.run_comprehensive_test():
+        logger.warning("Some data sources failed tests, but continuing...")
     
     # Test email configuration
     notification_manager = NotificationManager()
     logger.info("Email configuration loaded successfully")
     
+    # Log rate limiting status
+    logger.info("Rate limiting status:")
+    for source in ['polygon', 'alpha_vantage', 'yahoo_finance', 'quandl']:
+        status = rate_limiter.get_status(source)
+        logger.info(f"  {source}: {status['current_requests']}/{status['rate_limit']} requests")
+    
     logger.info("All connection tests completed")
     return True
+
+def run_daily_analysis_with_retry(target_date: date = None, symbols: list = None, max_retries: int = 3):
+    """Run daily analysis with retry logic."""
+    for attempt in range(max_retries):
+        try:
+            success = run_daily_analysis(target_date=target_date, symbols=symbols)
+            if success:
+                return True
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(60 * (attempt + 1))  # Exponential backoff
+    
+    return False
 
 def run_daily_analysis(target_date: date = None, symbols: list = None):
     """Run the daily options analysis."""
@@ -184,8 +205,8 @@ def main():
     #     logger.info("Outside market hours. Skipping analysis.")
     #     return
     
-    # Run the analysis
-    success = run_daily_analysis(target_date=target_date)
+    # Run the analysis with retry logic
+    success = run_daily_analysis_with_retry(target_date=target_date)
     
     if success:
         logger.info("Options Tracker completed successfully")

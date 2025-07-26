@@ -5,9 +5,11 @@ Quandl data source for options data.
 
 import requests
 import logging
+import time
 from typing import List, Optional
 from datetime import date, datetime
 from data.models import OptionsData, StockData
+from utils.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,9 @@ class QuandlDataSource:
     def get_stock_price(self, symbol: str, target_date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('quandl')
+            
             # Quandl stock data endpoint
             url = f"{self.base_url}/datasets/WIKI/{symbol}/data.json"
             params = {

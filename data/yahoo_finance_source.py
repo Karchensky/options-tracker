@@ -5,9 +5,11 @@ Yahoo Finance data source for options data.
 
 import requests
 import logging
+import time
 from typing import List, Optional
 from datetime import date, datetime
 from data.models import OptionsData, StockData
+from utils.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,9 @@ class YahooFinanceDataSource:
     def get_stock_price(self, symbol: str, target_date: date) -> Optional[StockData]:
         """Get stock price data for a specific date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('yahoo_finance')
+            
             # Yahoo Finance historical data
             start_timestamp = int(datetime.combine(target_date, datetime.min.time()).timestamp())
             end_timestamp = int(datetime.combine(target_date, datetime.max.time()).timestamp())
@@ -62,6 +67,9 @@ class YahooFinanceDataSource:
     def get_options_chain(self, symbol: str, expiration_date: date) -> List[OptionsData]:
         """Get options chain for a specific expiration date."""
         try:
+            # Apply rate limiting
+            rate_limiter.wait_if_needed('yahoo_finance')
+            
             # Convert date to timestamp
             expiration_timestamp = int(datetime.combine(expiration_date, datetime.min.time()).timestamp())
             

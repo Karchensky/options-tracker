@@ -1,24 +1,19 @@
-# Options Tracker - Insider Trading Detection System
+# Options Tracker
 
-A sophisticated options trading anomaly detection system designed to identify potential insider trading activity by monitoring unusual options volume, open interest patterns, and other suspicious trading behaviors.
+A comprehensive system for tracking options volume & open interest daily, detecting anomalous behavior, and providing email alerts. Built with Python, PostgreSQL, and Streamlit.
 
-## Overview
+## Features
 
-This system tracks daily options activity across thousands of stocks and identifies anomalous patterns that might indicate insider trading. It uses multiple data sources, advanced anomaly detection algorithms, and provides real-time alerts via email and a comprehensive web dashboard.
-
-## Key Features
-
-- **Multi-Source Data Collection**: Supports Polygon.io, Alpha Vantage, and other data providers with automatic fallback
-- **Comprehensive Stock Coverage**: Tracks S&P 500, S&P 400, S&P 600, NASDAQ, and NYSE stocks
-- **Advanced Anomaly Detection**: Machine learning-based detection of unusual options activity
-- **Real-Time Alerts**: Email notifications for detected anomalies with risk scoring
+- **Daily Data Collection**: Automated options data collection from multiple sources
+- **Anomaly Detection**: Machine learning-based detection of suspicious options activity
+- **Email Alerts**: Automated notifications for detected anomalies
 - **Beautiful Dashboard**: Sleek Streamlit interface with interactive visualizations
 - **Robust Database**: PostgreSQL with proper indexing, RLS, and migration support
 - **Scalable Architecture**: Modular design with proper error handling and logging
 
 ## Architecture
 
-```
+```mermaid
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Data Sources  │    │   Core System   │    │   Outputs       │
 │                 │    │                 │    │                 │
@@ -41,6 +36,7 @@ The system detects several types of suspicious options activity:
 ## Quick Start
 
 ### Local Development
+
 1. Install dependencies: `pip install -r requirements.txt --user`
 2. Set up Supabase: Create project at [supabase.com](https://supabase.com)
 3. Get API keys: [Polygon.io](https://polygon.io) (recommended) or [Alpha Vantage](https://alphavantage.co) (free)
@@ -50,6 +46,7 @@ The system detects several types of suspicious options activity:
 7. Run system: `python runner.py`
 
 ### Automated Deployment
+
 1. Set up GitHub Actions: Add secrets (see `.github/workflows/setup-secrets.md`)
 2. Deploy to Streamlit Cloud: Connect repository to [share.streamlit.io](https://share.streamlit.io)
 3. Monitor: Check GitHub Actions tab for automated runs
@@ -108,11 +105,13 @@ OTM_PERCENTAGE=10.0
 ```
 
 **Required API Keys:**
+
 - **Polygon.io** (Recommended): [Get API Key](https://polygon.io) - Best for options data
 - **Alpha Vantage** (Free tier): [Get API Key](https://alphavantage.co) - Good for stock data
 - **Quandl** (Free tier): [Get API Key](https://quandl.com) - Historical data backup
 
 **Supabase Setup:**
+
 1. Create a project at [supabase.com](https://supabase.com)
 2. Get your database URL from Settings → Database
 3. Get your anon key from Settings → API
@@ -139,286 +138,203 @@ python -m alembic current
 cd ..
 ```
 
-**Note**: The migrations directory is already configured. If you get errors about missing files, ensure you're in the `migrations` directory when running Alembic commands.
+### 4. Test Your Setup
 
-### 4. Test Configuration
+Run these commands to verify everything is working:
 
 ```bash
 # Test database connection
 python -c "from database.connection import db_manager; print(db_manager.test_connection())"
 
-# Test email configuration (optional)
-python -c "from utils.notifications import NotificationManager; nm = NotificationManager(); print(nm.send_test_email())"
-```
+# Test data source connection
+python -c "from data.data_sources import data_source_manager; print('Data sources ready')"
 
-### 5. Troubleshooting
+# Test anomaly detection
+python -c "from analysis.anomaly_detector import anomaly_detector; print('Anomaly detector ready')"
 
-**Common Installation Issues:**
-
-**Package Installation Errors:**
-```bash
-# If you get permission errors on Windows:
-pip install -r requirements.txt --user
-
-# If smtplib2 error occurs:
-# Remove smtplib2 from requirements.txt (it's part of Python standard library)
-```
-
-**Database Connection Issues:**
-- Verify your `.env` file has correct Supabase credentials
-- Use pooler connection string: `postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
-- Check Supabase Dashboard → Settings → Database → Connection Pooling for IP restrictions
-
-**Migration Issues:**
-```bash
-# If migrations fail, ensure you're in the migrations directory:
-cd migrations
-python -m alembic current
-python -m alembic upgrade head
-```
-
-**API Key Issues:**
-- Start with Alpha Vantage (free tier) for testing
-- Polygon.io requires paid plan for options data
-- Ensure API keys are correctly formatted in `.env` file
-
-## Usage
-
-### Daily Analysis
-
-Run the daily options analysis:
-
-```bash
+# Run a test analysis
 python runner.py
 ```
 
-This will:
-1. Update the comprehensive ticker list
-2. Fetch options data from all configured sources
-3. Detect anomalies using multiple algorithms
-4. Send email alerts for suspicious activity
-5. Store results in the database
+## Usage
 
-### Web Dashboard
+### Manual Run
 
-**Local Development:**
+```bash
+# Run analysis for today
+python runner.py
+
+# Run analysis for specific date
+python runner.py --date 2024-01-15
+
+# Run analysis for specific symbols
+python runner.py --symbols AAPL,MSFT,GOOGL
+```
+
+### Automated Daily Runs
+
+The system is configured to run automatically via GitHub Actions:
+
+- **Schedule**: Every weekday at 5:45 PM EST (after market close)
+- **Manual Trigger**: Available in GitHub Actions tab
+- **Monitoring**: Check Actions tab for run status and logs
+
+### Dashboard Access
+
+Launch the Streamlit dashboard:
+
 ```bash
 streamlit run app/main.py
 ```
 
-**Cloud Deployment:**
-- **URL**: https://bk-options-tracker.streamlit.app/
-- **Auto-updates**: Connected to your database
-- **Real-time data**: Shows latest analysis results
-
 The dashboard provides:
-- Real-time anomaly overview
-- Detailed analysis by symbol
-- Interactive visualizations
+
+- Real-time options data visualization
+- Anomaly detection results
 - Historical trend analysis
-- Risk scoring and probability assessment
-
-### Manual Ticker List Update
-
-```bash
-python -c "from data.ticker_manager import ticker_manager; ticker_manager.get_comprehensive_ticker_list()"
-```
-
-## Data Sources
-
-### Recommended: Polygon.io
-- **Pros**: Reliable options data, good API limits, comprehensive coverage
-- **Cons**: Paid service (free tier available)
-- **Setup**: Get API key from [polygon.io](https://polygon.io)
-
-### Alternative: Alpha Vantage
-- **Pros**: Free tier available, good stock data
-- **Cons**: Limited options data, rate limits
-- **Setup**: Get API key from [alphavantage.co](https://alphavantage.co)
-
-### Backup: Quandl
-- **Pros**: Free tier, good historical data
-- **Cons**: Limited real-time data
-- **Setup**: Get API key from [quandl.com](https://quandl.com)
+- Interactive filtering and search
 
 ## Configuration
 
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SUPABASE_DB_URL` | Database connection string | Yes |
+| `SUPABASE_API_KEY` | Supabase anon key | Yes |
+| `SUPABASE_URL` | Supabase project URL | Yes |
+| `POLYGON_API_KEY` | Polygon.io API key | Yes* |
+| `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key | No |
+| `QUANDL_API_KEY` | Quandl API key | No |
+| `SENDER_EMAIL` | Gmail address for alerts | No |
+| `EMAIL_PASSWORD` | Gmail app password | No |
+| `RECIPIENT_EMAIL` | Alert recipient email | No |
+
+*At least one data source API key is required
+
 ### Anomaly Detection Settings
 
-Adjust detection sensitivity in your `.env` file:
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `VOLUME_THRESHOLD` | 3.0 | Volume anomaly threshold multiplier |
+| `OI_THRESHOLD` | 2.5 | Open interest anomaly threshold |
+| `SHORT_TERM_DAYS` | 7 | Days to expiration for short-term options |
+| `OTM_PERCENTAGE` | 10.0 | OTM percentage threshold |
 
-```env
-# Volume threshold (3.0 = 3x normal volume)
-VOLUME_THRESHOLD=3.0
+## Data Sources
 
-# Open Interest threshold (2.5 = 2.5x normal OI change)
-OI_THRESHOLD=2.5
+The system supports multiple data sources with automatic fallback:
 
-# Short-term options (days to expiration)
-SHORT_TERM_DAYS=7
+### Primary Sources
 
-# OTM percentage (10% above current price)
-OTM_PERCENTAGE=10.0
+- **Polygon.io**: Best for options data, real-time quotes
+- **Alpha Vantage**: Good for stock data, free tier available
+- **Yahoo Finance**: Free fallback for basic data
+- **Quandl**: Historical data backup
+
+### Data Collection
+
+- **Frequency**: Daily after market close
+- **Coverage**: S&P 500 + additional symbols
+- **Data Types**: Options chains, volume, open interest, implied volatility
+- **Storage**: PostgreSQL with proper indexing
+
+## Anomaly Detection
+
+### Detection Methods
+
+1. **Volume Analysis**: Compares current volume to 30-day historical baseline
+2. **Open Interest Changes**: Tracks significant OI changes
+3. **Short-Term Options**: Identifies unusual activity in near-expiration options
+4. **OTM Options**: Detects unusual out-of-the-money call activity
+5. **Machine Learning**: Isolation Forest algorithm for composite scoring
+
+### Alert System
+
+- **Email Notifications**: Automated alerts for detected anomalies
+- **Dashboard Alerts**: Real-time display in Streamlit interface
+- **Logging**: Comprehensive logging for monitoring and debugging
+
+## Development
+
+### Project Structure
+
+```
+options-tracker/
+├── app/                    # Streamlit dashboard
+├── core/                   # Core business logic
+├── data/                   # Data sources and models
+├── database/               # Database connection and models
+├── analysis/               # Anomaly detection algorithms
+├── utils/                  # Utilities and helpers
+├── migrations/             # Database migrations
+├── .github/workflows/      # GitHub Actions
+└── requirements.txt        # Python dependencies
 ```
 
-### Rate Limiting
-
-Control API request rates:
-
-```env
-# Delay between requests (seconds)
-RATE_LIMIT_DELAY=0.1
-
-# Batch size for processing
-BATCH_SIZE=50
-
-# Maximum retries for failed requests
-MAX_RETRIES=3
-```
-
-## Database Schema
-
-The system uses a normalized database schema with the following main tables:
-
-- **stocks**: Stock information and metadata
-- **stock_price_snapshots**: Daily stock price data
-- **option_data**: Options chain data with Greeks
-- **option_anomalies**: Anomaly detection results
-- **data_source_logs**: System operation logs
-- **alert_logs**: Notification delivery logs
-
-**Database Setup:**
-The migration system automatically creates all tables with proper indexes and relationships. No manual database setup required.
-
-## Monitoring & Logging
-
-### Log Files
-
-- `options_tracker.log`: Main application logs
-- Database logs: Stored in `data_source_logs` table
-
-### Health Checks
-
-```bash
-# Check system status
-python -c "from core.options_tracker import options_tracker; print('System ready')"
-
-# Test data sources
-python -c "from data.data_sources import data_source_manager; print(data_source_manager.test_connection('polygon'))"
-```
-
-## Alert System
-
-### Email Alerts
-
-The system sends HTML email alerts containing:
-- Risk-scored anomaly list
-- Detailed metrics and ratios
-- Visual indicators for severity
-- Links to dashboard for further analysis
-
-### Alert Types
-
-1. **High Risk**: >70% insider probability
-2. **Medium Risk**: 40-70% insider probability  
-3. **Low Risk**: <40% insider probability
-
-## Testing
-
-### Unit Tests
-
-```bash
-pytest tests/
-```
-
-### Integration Tests
-
-```bash
-# Test full pipeline with sample data
-python -c "from core.options_tracker import options_tracker; options_tracker.run_daily_analysis(symbols=['AAPL', 'MSFT'])"
-```
-
-## Deployment
-
-### GitHub Actions (Automated Analysis)
-
-The system runs automatically Monday-Friday at 4:30 PM EST (after market close at 4:00 PM):
-
-1. **Set up secrets**: Add required secrets to GitHub repository (see `.github/workflows/setup-secrets.md`)
-2. **Monitor runs**: Check Actions tab in your repository
-3. **Manual trigger**: Available in GitHub Actions tab
-
-### Streamlit Cloud (Dashboard)
-
-Deploy your dashboard to the cloud:
-
-1. **Connect repository**: Go to [share.streamlit.io](https://share.streamlit.io)
-2. **Select repository**: Choose your options-tracker repo
-3. **Set main file**: `app/main.py`
-4. **Deploy**: Your dashboard will be available at https://bk-options-tracker.streamlit.app/
-
-**Environment Variables**: Add your database and API keys in Streamlit Cloud settings.
-
-## Security
-
-### Row Level Security (RLS)
-
-The database includes RLS policies for:
-- Data access control
-- Audit logging
-- User permissions
-
-### API Security
-
-- API keys stored in environment variables
-- Rate limiting to prevent abuse
-- Request validation and sanitization
-
-## Performance
-
-### Optimization Features
-
-- Database connection pooling
-- Cached data loading
-- Batch processing
-- Parallel data fetching
-- Efficient indexing
-
-### Expected Performance
-
-- **Processing Speed**: ~1000 symbols/hour
-- **Memory Usage**: ~500MB peak
-- **Database Size**: ~1GB/month for full coverage
-
-## Contributing
+### Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests
+4. Add tests if applicable
 5. Submit a pull request
 
-## License
+### Testing
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+# Run all tests
+python -m pytest
 
-## Disclaimer
+# Test specific module
+python -m pytest tests/test_anomaly_detector.py
 
-This system is for educational and research purposes only. It does not constitute financial advice or guarantee the detection of insider trading. Always conduct your own research and consult with financial professionals before making investment decisions.
+# Run with coverage
+python -m pytest --cov=.
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Database Connection Failed:**
+- Verify Supabase credentials in `.env`
+- Check network connectivity
+- Ensure database is active
+
+**API Rate Limits:**
+- The system includes built-in rate limiting
+- Check API key validity
+- Consider upgrading API plan if needed
+
+**Email Notifications Not Working:**
+- Verify Gmail app password (not regular password)
+- Check SMTP settings
+- Ensure recipient email is correct
+
+### Logs
+
+Check the following log files for debugging:
+
+- `options_tracker.log`: Main application logs
+- GitHub Actions logs: Available in Actions tab
+- Streamlit logs: Displayed in terminal when running dashboard
 
 ## Support
 
-For issues and questions:
-1. Check the logs for error details
-2. Review the configuration
-3. Test individual components
-4. Open an issue with detailed information
+For questions or issues:
 
-## Future Enhancements
+- Check the troubleshooting section above
+- Review the documentation
+- Ensure all API keys and database credentials are properly configured
 
-- Real-time streaming data
-- Additional anomaly detection algorithms
-- Machine learning model improvements
-- Mobile app
-- API endpoints for external integration
-- Advanced visualization features
+## Data Sources
+
+This system integrates with multiple data providers to ensure comprehensive coverage:
+
+- **Polygon.io**: Primary options data source with real-time quotes
+- **Alpha Vantage**: Stock data and backup options data
+- **Yahoo Finance**: Free fallback for basic market data
+- **Quandl**: Historical data and market information
+- **Supabase**: Database hosting and management
+- **Streamlit**: Dashboard framework and deployment

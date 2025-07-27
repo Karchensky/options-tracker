@@ -24,6 +24,7 @@ from core.options_tracker import options_tracker
 from utils.notifications import NotificationManager
 from utils.data_source_tester import data_source_tester
 from utils.rate_limiter import rate_limiter
+from utils.historical_data_populator import populate_historical_data
 
 # Configure logging
 logging.basicConfig(
@@ -184,19 +185,55 @@ def run_daily_analysis(target_date: date = None, symbols: list = None):
 
 def main():
     """Main entry point."""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Options Tracker')
+    parser.add_argument('--date', type=str, help='Target date (YYYY-MM-DD)')
+    parser.add_argument('--symbols', type=str, help='Comma-separated list of symbols')
+    parser.add_argument('--historical', action='store_true', help='Populate historical data for baseline')
+    parser.add_argument('--historical-weeks', type=int, default=3, help='Number of weeks of historical data to populate')
+    args = parser.parse_args()
+    
+    # Handle historical data population
+    if args.historical:
+        logger.info("Starting historical data population...")
+        end_date = date.today() - timedelta(days=1)
+        start_date = end_date - timedelta(weeks=args.historical_weeks)
+        
+        success = populate_historical_data(
+            start_date=start_date,
+            end_date=end_date,
+            max_symbols=50
+        )
+        
+        if success:
+            logger.info("Historical data population completed successfully!")
+            return
+        else:
+            logger.error("Historical data population failed!")
+            sys.exit(1)
+    
     logger.info("Options Tracker starting...")
     
-    # Get target date (default to today)
+    # Get target date (default to today or from args)
     target_date = date.today()
+    if args.date:
+        target_date = datetime.strptime(args.date, '%Y-%m-%d').date()
+    
+    # Set symbols if provided
+    symbols = None
+    if args.symbols:
+        symbols = [s.strip() for s in args.symbols.split(',')]
     
     # Check if it's a weekend
     if target_date.weekday() >= 5:
-        logger.info(f"Today ({target_date}) is a weekend. Skipping analysis as markets are closed.")
+        logger.info(f"Target date ({target_date}) is a weekend. Skipping analysis as markets are closed.")
         return
     
     # Check if it's a market holiday
     if check_market_holidays(target_date):
-        logger.info(f"Today ({target_date}) is a US market holiday. Skipping analysis as markets are closed.")
+        logger.info(f"Target date ({target_date}) is a US market holiday. Skipping analysis as markets are closed.")
         return
     
     # Check if we should run (optional: only during market hours)
@@ -206,7 +243,7 @@ def main():
     #     return
     
     # Run the analysis with retry logic
-    success = run_daily_analysis_with_retry(target_date=target_date)
+    success = run_daily_analysis_with_retry(target_date=target_date, symbols=symbols)
     
     if success:
         logger.info("Options Tracker completed successfully")
